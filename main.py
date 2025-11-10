@@ -1,16 +1,22 @@
-import numpy as np
 from numpy import random
-import json
+from itertools import combinations
+import time
+from typing import Any,Callable
 
+def decorator(f:Callable[...,Any]):
+    '''print time elapsed during <function f>'''
+    def g(*args,**kwargs):
+        t = time.perf_counter()
+        r = f(*args,**kwargs)
+        print(f'<function {f.__name__}>: time elapsed = {time.perf_counter()-t:.6f}s')
+        return r
+    return g
 
-
-# estimate P(x>y) ∀ x~gauss(a,s),y~gauss(b,s); NOTE x-y ~ gauss(a-b,sqrt(2)*s) -> P(x>y) = (1+erf(z/sqrt(2)))/2 ~= 1/(1+e^(-kz))
-eval = lambda a=float,b=float,s=float: 1/(1+np.e**(np.pi/np.sqrt(6)*(b-a)/s))
-
-
+# estimate P(x>y) ∀ x~gauss(a,s),y~gauss(b,s); NOTE x-y ~ gauss(a-b,sqrt(2)*s) -> P(x>y) = (1+erf(z/sqrt(2)))/2 ~= 1/(1+np.e**(np.pi/np.sqrt(6)*z))
+eval = lambda z=float: 1/(1+3.6**z)
 
 class Population:
-    def __init__(s,id:int=0, n:int=100, mean:float=0.0, stdv:float=1.0, mean_:float=1200, stdv_:float=200, C:list[object]=[]):
+    def __init__(s,id:int=0, n:int=1000, mean:float=0.0, stdv:float=1.0, mean_:float=1500, stdv_:float=200, C:list[object]=[]):
         s.id = id
         s.mean = mean
         s.stdv = stdv
@@ -28,31 +34,29 @@ class Population:
         return f'{s.__class__.__name__}{s.id}'
     
     def __str__(s) -> str:
-        if s.n < 7: return f'<class {s.fullid()}> n = {s.n}\n\t' + '\n\t'.join([str(c) for c in s.C])
-        else: return f'<class {s.fullid()}> n = {s.n}\n\t' + '\n\t'.join([str(s.C[i]) for i in range(6)]) + f'\n\t... ({s.n-6} more)'
+        if s.n < 10: return f'<class {s.fullid()}> n = {s.n}\n\t' + '\n\t'.join([str(c) for c in s.C])
+        else: return f'<class {s.fullid()}> n={s.n}\n\t'+'\n\t'.join([str(s.C[i]) for i in (0,1,2,s.n//2-1,s.n//2,s.n//2+1,-3,-2,-1)])+f'\n\t...({s.n-9} more)'
 
     def __repr__(s) -> str:
         return f'{s.__class__.__name__}(id={s.id},stdv={s.stdv},stdv_={s.stdv_},C=['+', '.join([repr(c) for c in s.C])+'])'
 
     def addcreature(s,*C:object):
-        for c in C:
-            s.C.append(c)
-            s.n += 1
+        s.C.extend(C)
+        s.n = len(s.C)
 
     def play(s,a:object,b:object):
-        e = eval(a.x_,b.x_,s.stdv_) # expected value P(x_>y_) ∀ x_~gauss(a,s), y_~gauss(b,s)
-        t = random.random() < eval(a.x,b.x,s.stdv) # actual value proportioned by P(x>y) ∀ x~gauss(a,s), y~gauss(b,s)
-        a.x_ += s.k*(t-e)
-        b.x_ -= s.k*(t-e)
+        d = (eval((b.x-a.x)/s.stdv) > random.random()) - eval((b.x_-a.x_)/s.stdv_)
+        a.x_ += s.k*d
+        b.x_ -= s.k*d
 
+    @decorator
     def rrt(s, m:int=10):
         '''run round-robin-tournament <int m> times; each round, all players compete every other player once'''
         for _ in range(m):
-            for i in range(s.n):
-                for j in range(i): s.play(s.C[i],s.C[j])
+            for a, b in combinations(s.C, 2): s.play(a, b)
     
     def rank(s, f = lambda c: c.x_):
-        '''sort creatures; default smallest to largest'''
+        '''sort <list[object] s.C>; default by c.x_ ∀ <object c> ∈ s.C in increasing order'''
         s.C.sort(key = f)
 
 
@@ -71,7 +75,7 @@ class Creature:
     
     def __repr__(s) -> str:
         return f'{s.__class__.__name__}(id={s.id},x={s.x},x_={s.x_})'
-    
+
 
 
 if __name__ == '__main__':
@@ -79,4 +83,4 @@ if __name__ == '__main__':
     P.addcreature(Creature(100,4.0,1200),Creature(101,-4.0,1200))
     P.rrt()
     P.rank()
-    for c in P.C: print(c)
+    print(P)
